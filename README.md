@@ -76,4 +76,3 @@ python3 research_poc.py -t <TARGET_IP>
 **FOR EDUCATIONAL AND AUTHORIZED RESEARCH ONLY.** Unauthorized testing against systems you do not own is illegal. The author is not responsible for any misuse of this research code. Use responsibly to improve global security.
 **Developed By:** qassam-315
 **Vulnerability Discovery Date:** May 06, 2026
-
